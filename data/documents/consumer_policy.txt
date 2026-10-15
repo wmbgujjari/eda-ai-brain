@@ -1,0 +1,54 @@
+CONSUMER SERVICE POLICY
+
+Consumer Category
+
+Domestic consumers are residential electricity consumers. Commercial consumers
+are consumers using electricity for business or commercial activities. Industrial
+consumers are consumers using electricity for manufacturing and industrial
+operations.
+
+New Connection
+
+A domestic consumer applying for a new electricity connection must submit the
+required application form and valid identity and address proof. The application
+is reviewed by the electricity distribution company before the connection is
+approved.
+
+The standard processing time for a new domestic electricity connection is
+7 working days after all required documents have been submitted.
+
+Commercial consumers may require additional documentation depending on the
+connected load and nature of the business. The processing time can vary based
+on field verification and required approvals.
+
+Meter Reading
+
+Consumer meter readings are recorded periodically by the electricity
+distribution company. The recorded meter reading is used to calculate the
+consumer's electricity consumption for the billing period.
+
+Monthly Consumption
+
+Monthly electricity consumption is calculated based on the difference between
+the current meter reading and the previous meter reading.
+
+For example, if the previous meter reading is 1250 units and the current meter
+reading is 1500 units, the monthly consumption is 250 units.
+
+Billing
+
+The electricity bill is generated based on the consumer's recorded consumption
+and the applicable tariff.
+
+Domestic and commercial consumers may have different tariff structures.
+Additional charges, taxes, or applicable adjustments may be included in the
+final bill.
+
+Consumer Complaints
+
+Consumers can raise complaints related to billing, meter readings, power
+supply, new connections, or other electricity services.
+
+A complaint should contain the consumer ID and sufficient information about
+the issue so that the electricity distribution company can investigate and
+resolve the complaint.
