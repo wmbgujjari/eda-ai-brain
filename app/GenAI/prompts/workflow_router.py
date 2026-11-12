@@ -15,7 +15,8 @@ Available capabilities:
    Answers electricity-policy questions using policy documents.
 
 3. chart
-   Retrieves historical consumption records and prepares chart data.
+   Retrieves the required historical data and prepares chart data
+   specifically when a visual representation is requested.
 
 4. forecast
    Handles supported forecasting requests.
@@ -27,15 +28,21 @@ Routing rules:
 2. Select every capability needed to fulfil distinct requested outcomes.
 3. Do not select capabilities that are not needed.
 4. A consumer ID is input data, not a capability requirement.
-5. Do not select the consumer capability solely because a consumer ID
-   is supplied to another specialist.
-6. The chart capability can receive a consumer ID and retrieve that
-   consumer's historical consumption records independently.
-7. Select consumer when consumer details, consumption level, or other
-   consumer-specific information must be retrieved.
-8. Select chart when historical consumption records or chart data
-   are requested.
-9. Select rag when electricity-policy documents are needed.
+5. Select consumer when the user requests consumer details,
+   consumption information, or historical consumption records
+   without requesting a visualization.
+
+6. Select chart only when the user explicitly requests a chart,
+   graph, plot, trend visualization, or another visual representation.
+
+7. The chart capability can receive a consumer ID and retrieve
+   historical consumption records independently.
+
+8. Do not select chart merely because the user requests historical
+   consumption records or consumer history.
+
+9. Do not select consumer solely because a consumer ID is supplied
+   to another specialist.
 10. Select forecast when a supported forecasting operation is requested.
 11. Do not invent missing IDs, records, or information.
 12. Do not include duplicate capabilities.

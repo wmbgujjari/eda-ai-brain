@@ -5,19 +5,28 @@ from pydantic import BaseModel, Field
 
 from app.GenAI.llm.llm_client import llm
 from app.GenAI.prompts.workflow_router import WORKFLOW_ROUTER_PROMPT
-from app.GenAI.agents.capability_classifier import classify_capabilities
+from app.GenAI.core.capability_classifier import classify_capabilities
 
 
-Capability = Literal["consumer", "rag", "chart", "forecast"]
+Capability = Literal[
+    "consumer",
+    "rag",
+    "chart",
+    "forecast",
+    "email",
+    "word",
+]
 
 
 class WorkflowDecision(BaseModel):
     required_capabilities: list[Capability] = Field(
         description="All specialist capabilities required by the request."
     )
+
     reason: str = Field(
         description="Brief explanation of the capability selection."
     )
+
     workflow: Literal["single", "multi"] = Field(
         description="Execution strategy derived from the capabilities."
     )
@@ -27,6 +36,7 @@ workflow_router_llm = llm.with_structured_output(WorkflowDecision)
 
 
 def choose_workflow(user_request: str) -> WorkflowDecision:
+
     # Step 1: Use deterministic classification first.
     capabilities = classify_capabilities(user_request)
 
@@ -53,6 +63,7 @@ def choose_workflow(user_request: str) -> WorkflowDecision:
         capabilities = list(
             dict.fromkeys(decision.required_capabilities)
         )
+
         reason = decision.reason
 
     # Step 3: Validate that at least one capability was identified.

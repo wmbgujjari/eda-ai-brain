@@ -1,17 +1,31 @@
 from uuid import uuid4
 
-from fastapi import APIRouter
+from fastapi import APIRouter,HTTPException
 from pydantic import BaseModel
 from langchain_core.messages import HumanMessage
 
 from app.services.conversation_service import ConversationService
-from app.GenAI.agents.workflow_router import choose_workflow
+from app.GenAI.core.workflow_router import choose_workflow
 from app.GenAI.graph.main_agent_graph import main_agent_graph
 from app.GenAI.graph.agentic_graph import agentic_graph
 
 import json
+from typing import Optional
 
-from fastapi.responses import StreamingResponse
+
+from fastapi.responses import StreamingResponse,FileResponse
+from pathlib import Path
+from app.GenAI.tools.word_tool import OUTPUT_DIR
+from app.GenAI.tools.email_tool import send_email
+
+class SendEmailRequest(BaseModel):
+    thread_id: str
+    to: list[str]
+    cc: list[str] = []
+    bcc: list[str] = []
+    subject: str
+    body: str
+    attachments: list[str] = []
 
 conversation_service = ConversationService()
 
@@ -25,6 +39,8 @@ class ChatRequest(BaseModel):
     message: str
     thread_id: str | None = None
 
+class RenameConversationRequest(BaseModel):
+    title: str
 
 def get_thread_id(thread_id: str | None) -> str:
     """Reuse an existing conversation ID or create a new one."""
@@ -159,9 +175,11 @@ async def chat(request: ChatRequest):
         request.message,
     )
 
+    execution_id = str(uuid4())
+    
     config = {
         "configurable": {
-            "thread_id": thread_id,
+            "thread_id": execution_id,
         }
     }
 
@@ -183,7 +201,28 @@ async def chat(request: ChatRequest):
         )
 
         messages = result.get("messages", [])
-        response = messages[-1].content if messages else ""
+        raw_response = messages[-1].content if messages else ""
+
+        response = raw_response
+        task_explanation = {}
+
+        # Extract structured specialist output
+        if isinstance(raw_response, str):
+            try:
+                parsed_response = json.loads(raw_response)
+
+                if isinstance(parsed_response, dict) and "result" in parsed_response:
+                    task_result = parsed_response.get("result", {})
+                    task_explanation = parsed_response.get("explanation", {})
+
+                    if isinstance(task_result, dict):
+                        response = task_result.get("response", "")
+                    else:
+                        response = str(task_result)
+
+            except json.JSONDecodeError:
+                pass
+
         chart_data = extract_chart_data(result, workflow)
 
         conversation_service.add_message(
@@ -194,8 +233,28 @@ async def chat(request: ChatRequest):
             chart_data,
         )
 
+        conversation_service.add_execution(
+            thread_id=thread_id,
+            user_id=user_id,
+            user_request=request.message,
+            workflow=workflow,
+            plan=[
+                {
+                    "task_name": decision.required_capabilities[0],
+                    "task_input": request.message,
+                }
+            ],
+            task_results={
+                "result": response,
+            },
+            chart_data=chart_data,
+            final_answer=response,
+            status="completed",
+        )       
+
         return {
             "response": response,
+            "task_explanation": task_explanation,
             "thread_id": thread_id,
             "chart_data": chart_data,
             "workflow": workflow,
@@ -227,6 +286,7 @@ async def chat(request: ChatRequest):
                 "messages": [
                     HumanMessage(content=request.message)
                 ],
+                "thread_id": thread_id,
                 "plan": [],
                 "current_step": 0,
                 "results": {},
@@ -265,6 +325,22 @@ async def chat(request: ChatRequest):
                 "assistant",
                 response,
                 chart_data,
+                task_results=final_state.get("results", {}),
+            )
+
+            conversation_service.add_execution(
+                thread_id=thread_id,
+                user_id=user_id,
+                user_request=request.message,
+                workflow=workflow,
+                plan=[
+                    task.model_dump() if hasattr(task, "model_dump") else task
+                    for task in final_state.get("plan", [])
+                ],
+                task_results=final_state.get("results", {}),
+                chart_data=chart_data,
+                final_answer=response,
+                status="completed",
             )
 
             yield send_event(
@@ -298,6 +374,50 @@ async def chat(request: ChatRequest):
     )
 
 
+@router.get("/documents/{filename}")
+def download_word_document(filename: str):
+
+    # Prevent directory traversal
+    if Path(filename).name != filename or not filename.endswith(".docx"):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid document filename."
+        )
+
+    print("\n--- WORD DOWNLOAD DEBUG ---")
+    print("REQUESTED FILENAME:", filename)
+    print("OUTPUT_DIR:", OUTPUT_DIR)
+
+    output_dir = Path(OUTPUT_DIR).resolve()
+    file_path = (output_dir / filename).resolve()
+
+    print("RESOLVED OUTPUT DIR:", output_dir)
+    print("RESOLVED FILE PATH:", file_path)
+    print("FILE EXISTS:", file_path.is_file())
+    print("---------------------------\n")
+
+    if file_path.parent != output_dir:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid document path."
+        )
+
+    if not file_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Word document not found."
+        )
+
+    return FileResponse(
+        path=str(file_path),
+        filename=filename,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        )
+    )
+
+
 
 @router.get("/conversations")
 def get_conversations_userId():
@@ -322,3 +442,120 @@ def get_conversation(thread_id: str):
         }
 
     return conversation
+
+@router.patch("/conversations/{thread_id}/rename")
+def rename_conversation(
+    thread_id: str,
+    request: RenameConversationRequest
+):
+    user_id = "user-001"
+
+    title = request.title.strip()
+
+    if not title:
+        return {
+            "success": False,
+            "message": "Conversation title cannot be empty."
+        }
+
+    updated = conversation_service.rename_conversation(
+        user_id=user_id,
+        thread_id=thread_id,
+        new_title=title
+    )
+
+    if not updated:
+        return {
+            "success": False,
+            "message": "Conversation not found or already inactive."
+        }
+
+    return {
+        "success": True,
+        "thread_id": thread_id,
+        "title": title,
+        "message": "Conversation renamed successfully."
+    }
+
+@router.delete("/conversations/{thread_id}")
+def delete_conversation(thread_id: str):
+
+    user_id = "user-001"
+
+    deleted = conversation_service.delete_conversation(
+        user_id=user_id,
+        thread_id=thread_id
+    )
+
+    if not deleted:
+        return {
+            "success": False,
+            "message": "Conversation not found or already inactive."
+        }
+
+    return {
+        "success": True,
+        "thread_id": thread_id,
+        "message": "Conversation deleted successfully."
+    }
+
+
+@router.post("/send-email")
+async def send_email_endpoint(request: SendEmailRequest):
+
+    # Validate required fields.
+    if not request.to:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one recipient is required."
+        )
+
+    if not request.subject.strip() or not request.body.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Email subject and body are required."
+        )
+
+    # Validate attachment filenames.
+    for filename in request.attachments:
+        if Path(filename).name != filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid attachment filename."
+            )
+
+        file_path = Path(OUTPUT_DIR) / filename
+
+        if not file_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Attachment not found: {filename}"
+            )
+
+    # Send the actual email.
+    result = send_email.invoke({
+        "to": request.to,
+        "cc": request.cc,
+        "bcc": request.bcc,
+        "subject": request.subject,
+        "body": request.body,
+        "attachment_filenames": request.attachments,
+    })
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=500,
+            detail=result.get("message", "Email delivery failed.")
+        )
+
+    print("\nEMAIL SENT SUCCESSFULLY")
+    print("TO:", request.to)
+    print("CC:", request.cc)
+    print("ATTACHMENTS:", request.attachments)
+
+    return {
+        "success": True,
+        "message": "Email sent successfully.",
+        "details": result,
+    }
+

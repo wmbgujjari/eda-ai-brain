@@ -9,7 +9,7 @@ from app.GenAI.prompts.manager_prompt import MANAGER_SYSTEM_PROMPT
 class PlannedTask(BaseModel):
     """One task assigned to a registered specialist."""
 
-    task_name: Literal["consumer", "rag", "chart"]
+    task_name: Literal["consumer", "rag", "chart","forecast","email","word"]
     task_input: str = Field(
         description="The specific instruction for this specialist."
     )
